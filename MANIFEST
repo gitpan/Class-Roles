@@ -1,0 +1,8 @@
+Build.PL            Installation provided by Module::Build.  Hooray!
+lib/Class/Roles.pm  The big cheese
+Makefile.PL         Backwards compatibility for ExtUtils::MakeMaker
+MANIFEST			This list of files
+META.yml            Metadata Module::Build creates
+README              Basic Information You Should Have Read Already.  Why Wait?
+t/roles.t           Test that Class::Roles works
+t/multiroles.t      Test that multi-role declarations work
