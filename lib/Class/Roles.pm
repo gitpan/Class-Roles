@@ -4,13 +4,14 @@ use strict;
 use Scalar::Util 'blessed';
 
 use vars '$VERSION';
-$VERSION = '0.20';
+$VERSION = '0.30';
 
 my %actions =
 (
 	role  => \&role,
 	does  => \&does,
 	multi => \&multi,
+	apply => \&apply,
 );
 
 my (%roles, %does);
@@ -18,11 +19,22 @@ my (%roles, %does);
 sub import
 {
 	my $caller          = caller();
-	my ($self, %args)   = @_;
+	my $self            = shift;
 
-	while (my ($name, $value) = each %args)
+	if ( @_ % 2 != 0 )
 	{
-		$actions{ $name }->( $caller, $value ) if exists $actions{ $name };
+		require Carp;
+		Carp::croak( 'Improper argument list' );
+	}
+
+	while (my ($name, $value) = splice( @_, 0, 2 ))
+	{
+		unless (exists $actions{ $name })
+		{
+			require Carp;
+			Carp::croak( "Unknown action '$name'" );
+		}
+		$actions{ $name }->( $caller, $value );
 	}
 }
 
@@ -44,6 +56,13 @@ sub multi
 		$methods = [ $methods ] unless ref $methods eq 'ARRAY';
 		install_methods( $caller, $role, @$methods );
 	}
+}
+
+sub apply
+{
+	my ($caller, $args) = @_;
+	my ($role, $to)     = @$args{ qw( role to ) };
+	does( $to, $role );
 }
 
 sub does
@@ -111,31 +130,31 @@ Class::Roles - use Perl 6 roles in Perl 5
 
 =head1 SYNOPSIS
 
-	# provide a role
-	package Animal;
+    # provide a role
+    package Animal;
 
-	use Class::Roles role => [qw( eat sleep )]
+    use Class::Roles role => [qw( eat sleep )]
 
-	sub eat   { 'chomp chomp' }; 
-	sub sleep { 'snore snore' };
+    sub eat   { 'chomp chomp' }; 
+    sub sleep { 'snore snore' };
 
-	# use a role
-	package Dog;
+    # use a role
+    package Dog;
 
-	use Class::Roles does => 'Animal';
+    use Class::Roles does => 'Animal';
 
-	# test that a class or object performs a role
-	$dog->does( 'Animal' );
-	Dog->does( 'Animal' );
-	UNIVERSAL::does( 'Dog', 'Animal' );
+    # test that a class or object performs a role
+    $dog->does( 'Animal' );
+    Dog->does( 'Animal' );
+    UNIVERSAL::does( 'Dog', 'Animal' );
 
-	# test that subclasses also respect their parents' roles
+    # test that subclasses also respect their parents' roles
 
-	package RoboDog;
+    package RoboDog;
 
-	use base 'Dog';
+    use base 'Dog';
 
-	Dog->does( 'Animal' );
+    Dog->does( 'Animal' );
 
 =head1 DESCRIPTION
 
@@ -165,19 +184,19 @@ To define a role, define a package containing the methods that comprise that
 role.  Pass these methods to C<Class::Roles>' C<import()> method via the
 C<role> keyword.  For example, the C<Lifeguard> role may be:
 
-	package Lifeguard;
+    package Lifeguard;
 
-	use Class::Roles role => 'rescue_drowning_swimmer', 'scan_ocean';
+    use Class::Roles role => 'rescue_drowning_swimmer', 'scan_ocean';
 
-	sub rescue_drowning_swimmer
-	{
-		# implementation here
-	}
+    sub rescue_drowning_swimmer
+    {
+        # implementation here
+    }
 
-	sub scan_ocean
-	{
-		# implementation here
-	}
+    sub scan_ocean
+    {
+        # implementation here
+    }
 
 A C<Lifeguard> role will be declared, comprised of the
 C<rescue_drowning_swimmer> and C<scan_ocean> methods.
@@ -186,28 +205,28 @@ C<rescue_drowning_swimmer> and C<scan_ocean> methods.
 
 Use the C<multi> target to define multiple roles in a single module:
 
-	package MultiRoles;
+    package MultiRoles;
 
-	sub drive_around   { ... }
-	sub steering_wheel { ... }
+    sub drive_around   { ... }
+    sub steering_wheel { ... }
 
-	sub fly_around     { ... }
-	sub yoke           { ... }
+    sub fly_around     { ... }
+    sub yoke           { ... }
 
-	use Class::Roles multi =>
-	{
-		car   => [qw( drive_around steering_wheel )],
-		plane => [qw( fly_around   yoke           )],
-	}
+    use Class::Roles multi =>
+    {
+        car   => [qw( drive_around steering_wheel )],
+        plane => [qw( fly_around   yoke           )],
+    }
 
 =head2 Performing a Role
 
 Any class that performs a role should declare that it does so, via the C<does>
 keyword to C<import()>:
 
-	package Dog;
+    package Dog;
 
-	use Class::Roles does => 'Lifeguard';
+    use Class::Roles does => 'Lifeguard';
 
 Any methods of the role that the performing class does not implement will be
 imported.
@@ -216,19 +235,76 @@ As you'd expect, extending a class that performs a role means that the subclass
 also performs that role.  Inheritance is just a specific case of role-based
 systems.
 
+=head3 A Word About Existing Methods
+
+Due to the nature of Perl 5, you may see C<Subroutine foo redefined> warnings
+if you mark a class as performing a role which already implements one or more
+methods of that role.  You can solve this in several ways, in rough order of
+preference:
+
+=over 4
+
+=item * Predeclare all existing subs before you use Class::Roles:
+
+    sub foo;
+
+    use Class::Roles does => 'Foo';
+
+=item * Call C<Class::Roles::import()> explicitly:
+
+    use Class::Roles;
+    Class::Roles->import( does => 'Foo' );
+
+    sub foo
+    {
+        ...
+    }
+
+=item * Use Class::Roles after declaring the existing methods:
+
+    sub foo
+    {
+        ...
+    }
+
+    use Class::Roles does => 'Foo';
+
+=item * Disable the C<redefined> warning with the L<warnings> pragma of 5.6 on
+
+    use Class::Roles does => 'Foo';
+
+    no warnings 'redefine';
+
+=back
+
 =head2 Testing a Role
 
 Use the C<does()> method to test that a class or object performs the named
 role.
 
-	my $dog = Dog->new();
-	print "Can't help a drowning swimmer\n" unless $dog->does( 'Lifeguard' );
+    my $dog = Dog->new();
+
+    print "Can't help a drowning swimmer\n"
+        unless $dog->does( 'Lifeguard' );
 
 Use C<does()> instead of C<isa()> if allomorphism is important to you.
 
-=over 4
+=head2 Applying a Role to Another Class
 
-=back
+You can apply a role to a class outside of the other class:
+
+    use Mail::TempAddress;
+    use Mail::Action::DeleteAddresses;
+
+    use Class::Roles
+        apply => {
+            to   => 'Mail::TempAddress::Addresses',
+            role => 'DeleteAddresses',
+        };
+
+The usual caveats apply.  In general, this should work on just about any other
+class.  In specific, the implementation and nature of the role will have a
+great effect on the efficacy of this technique.
 
 =head1 SEE ALSO
 
@@ -248,7 +324,7 @@ L<http://c2.com/cgi/wiki?AlloMorphism>
 
 =head1 AUTHOR
 
-chromatic, C<chromatic@wgz.org>
+chromatic, E<lt>chromatic@wgz.orgE<gt>
 
 =head1 BUGS
 
@@ -258,9 +334,11 @@ No known bugs.
 
 =over 4
 
-=item * better error checking
+=item * merge with L<Class::Role> (soon)
 
-=item * keep up to date with Perl 6 syntax
+=item * better error checking (some in this version, some later)
+
+=item * keep up to date with Perl 6 syntax (long-term goals)
 
 =back
 

@@ -5,6 +5,7 @@ my $build = Module::Build->new(
 	license     => 'perl',
 	requires    => {
 		Test::Simple     => '0.47',
+		Test::Exception  => '',
 	},
 	dist_version_from => 'lib/Class/Roles.pm',
 );
